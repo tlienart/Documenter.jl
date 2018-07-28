@@ -26,7 +26,7 @@ Prints out the name of each object that has not had its docs spliced into the do
 function missingdocs(doc::Documents.Document)
     doc.user.checkdocs === :none && return
     println(" > checking for missing docstrings.")
-    bindings = allbindings(doc.user.checkdocs, doc.user.modules)
+    bindings = allbindings(doc.user.checkdocs, doc.blueprint.modules)
     for object in keys(doc.internal.objects)
         if haskey(bindings, object.binding)
             signatures = bindings[object.binding]
@@ -93,7 +93,7 @@ function footnotes(doc::Documents.Document)
     # For all ids the final result should be `(N, 1)` where `N > 1`, i.e. one or more
     # footnote references and a single footnote body.
     footnotes = Dict{Documents.Page, Dict{String, Tuple{Int, Int}}}()
-    for (src, page) in doc.internal.pages
+    for (src, page) in doc.blueprint.pages
         empty!(page.globals.meta)
         orphans = Dict{String, Tuple{Int, Int}}()
         for element in page.elements
@@ -148,7 +148,7 @@ function linkcheck(doc::Documents.Document)
     if doc.user.linkcheck
         if hascurl()
             println(" > checking external URLs:")
-            for (src, page) in doc.internal.pages
+            for (src, page) in doc.blueprint.pages
                 println("   - ", src)
                 for element in page.elements
                     Documents.walk(page.globals.meta, page.mapping[element]) do block

@@ -26,7 +26,7 @@ import Compat.Base64: stringmime
 
 
 function expand(doc::Documents.Document)
-    for (src, page) in doc.internal.pages
+    for (src, page) in doc.blueprint.pages
         empty!(page.globals.meta)
         for element in page.elements
             Selectors.dispatch(ExpanderPipeline, element, page, doc)
@@ -287,11 +287,11 @@ function Selectors.runner(::Type{DocsBlocks}, x, page, doc)
         end
 
         # Find the docs matching `binding` and `typesig`. Only search within the provided modules.
-        docs = Documenter.DocSystem.getdocs(binding, typesig; modules = doc.user.modules)
+        docs = Documenter.DocSystem.getdocs(binding, typesig; modules = doc.blueprint.modules)
 
         # Include only docstrings from user-provided modules if provided.
-        if !isempty(doc.user.modules)
-            filter!(d -> d.data[:module] in doc.user.modules, docs)
+        if !isempty(doc.blueprint.modules)
+            filter!(d -> d.data[:module] in doc.blueprint.modules, docs)
         end
 
         # Check that we aren't printing an empty docs list. Skip block when empty.

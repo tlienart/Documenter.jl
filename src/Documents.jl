@@ -55,6 +55,18 @@ function Page(source::AbstractString, build::AbstractString)
     Page(source, build, elements, IdDict(), Globals())
 end
 
+
+# Document blueprints.
+# --------------------
+
+# Should contain all the information that is necessary to build a document.
+# Currently has enough information to just run doctests.
+struct DocumentBlueprint
+    pages :: Dict{String, Page} # Markdown files only.
+    modules :: Set{Module} # Which modules to check for missing docs?
+end
+
+
 # Document Nodes.
 # ---------------
 
@@ -148,7 +160,7 @@ to other page, reference to the [`Page`](@ref) object etc.
 mutable struct NavNode
     """
     `nothing` if the `NavNode` is a non-page node of the navigation tree, otherwise
-    the string should be a valid key in `doc.internal.pages`
+    the string should be a valid key in `doc.blueprint.pages`
     """
     page           :: Union{String, Nothing}
     """
@@ -191,7 +203,6 @@ struct User
     checkdocs::Symbol         # Check objects missing from `@docs` blocks. `:none`, `:exports`, or `:all`.
     doctestfilters::Vector{Regex} # Filtering for doctests
     strict::Bool              # Throw an exception when any warnings are encountered.
-    modules :: Set{Module}    # Which modules to check for missing docs?
     pages   :: Vector{Any}    # Ordering of document pages specified by the user.
     assets  :: Vector{String}
     repo    :: String  # Template for URL to source code repo
@@ -211,7 +222,6 @@ Private state used to control the generation process.
 struct Internal
     assets  :: String             # Path where asset files will be copied to.
     remote  :: String             # The remote repo on github where this package is hosted.
-    pages   :: Dict{String, Page} # Markdown files only.
     navtree :: Vector{NavNode}           # A vector of top-level navigation items.
     navlist :: Vector{NavNode}           # An ordered list of `NavNode`s that point to actual pages
     headers :: Anchors.AnchorMap         # See `modules/Anchors.jl`. Tracks `Markdown.Header` objects.
@@ -231,8 +241,9 @@ end
 Represents an entire document.
 """
 struct Document
-    user     :: User     # Set by the user via `makedocs`.
-    internal :: Internal # Computed values.
+    user      :: User     # Set by the user via `makedocs`.
+    internal  :: Internal # Computed values.
+    blueprint :: DocumentBlueprint
 end
 
 function Document(;
@@ -282,7 +293,6 @@ function Document(;
         checkdocs,
         doctestfilters,
         strict,
-        Utilities.submodules(modules),
         pages,
         assets,
         repo,
@@ -298,7 +308,6 @@ function Document(;
     internal = Internal(
         Utilities.assetsdir(),
         Utilities.getremote(root),
-        Dict{String, Page}(),
         [],
         [],
         Anchors.AnchorMap(),
@@ -310,7 +319,11 @@ function Document(;
         Dict{Markdown.Link, String}(),
         Set{Symbol}(),
     )
-    Document(user, internal)
+    blueprint = DocumentBlueprint(
+        Dict{String, Page}(),
+        Utilities.submodules(modules),
+    )
+    Document(user, internal, blueprint)
 end
 
 ## Methods
@@ -319,7 +332,7 @@ function addpage!(doc::Document, src::AbstractString, dst::AbstractString)
     page = Page(src, dst)
     # page's identifier is the path relative to the `doc.user.source` directory
     name = normpath(relpath(src, doc.user.source))
-    doc.internal.pages[name] = page
+    doc.blueprint.pages[name] = page
 end
 
 """
@@ -388,7 +401,7 @@ end
 
 # some replacements for jldoctest blocks
 function doctest_replace!(doc::Documents.Document)
-    for (src, page) in doc.internal.pages
+    for (src, page) in doc.blueprint.pages
         empty!(page.globals.meta)
         for element in page.elements
             page.globals.meta[:CurrentFile] = page.source

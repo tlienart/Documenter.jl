@@ -18,7 +18,7 @@ import Compat.Markdown
 function render(doc::Documents.Document)
     copy_assets(doc)
     mime = Formats.mimetype(:markdown)
-    for (src, page) in doc.internal.pages
+    for (src, page) in doc.blueprint.pages
         open(Formats.extension(:markdown, page.build), "w") do io
             for elem in page.elements
                 node = page.mapping[elem]
