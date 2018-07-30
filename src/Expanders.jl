@@ -5,7 +5,6 @@ module Expanders
 
 import ..Documenter:
     Anchors,
-    Builder,
     Documents,
     Formats,
     Documenter,

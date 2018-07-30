@@ -137,7 +137,8 @@ end
     @test Documenter.Utilities.relpath_from_repo_root(tempname()) == nothing
 
     import Documenter.Documents: Document, Page, Globals
-    let page = Page("source", "build", [], IdDict(), Globals()), doc = Document()
+    import Documenter.Utilities: Markdown2
+    let page = Page("source", "build", [], IdDict(), Globals(), Markdown2.MD()), doc = Document()
         code = """
         x += 3
         γγγ_γγγ

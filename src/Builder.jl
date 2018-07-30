@@ -9,6 +9,7 @@ module Builder
 
 import ..Documenter:
     Anchors,
+    DocTests,
     Documents,
     Documenter,
     Utilities
@@ -24,6 +25,7 @@ using Compat, DocStringExtensions
 The default document processing "pipeline", which consists of the following actions:
 
 - [`SetupBuildDirectory`](@ref)
+- [`Doctest`](@ref)
 - [`ExpandTemplates`](@ref)
 - [`CrossReferences`](@ref)
 - [`CheckDocument`](@ref)
@@ -37,6 +39,11 @@ abstract type DocumentPipeline <: Selectors.AbstractSelector end
 Creates the correct directory layout within the `build` folder and parses markdown files.
 """
 abstract type SetupBuildDirectory <: DocumentPipeline end
+
+"""
+Populates the `.blueprint` field of the [`Documents.Document`](@ref) object.
+"""
+abstract type Doctest <: DocumentPipeline end
 
 """
 Executes a sequence of actions on each node of the parsed markdown files in turn.
@@ -65,6 +72,7 @@ Writes the document tree to the `build` directory.
 abstract type RenderDocument <: DocumentPipeline end
 
 Selectors.order(::Type{SetupBuildDirectory})   = 1.0
+Selectors.order(::Type{Doctest})               = 1.1
 Selectors.order(::Type{ExpandTemplates})       = 2.0
 Selectors.order(::Type{CrossReferences})       = 3.0
 Selectors.order(::Type{CheckDocument})         = 4.0
@@ -174,6 +182,16 @@ walk_navpages(ps::Vector, parent, doc) = [walk_navpages(p, parent, doc)::Documen
 walk_navpages(src::String, parent, doc) = walk_navpages(true, nothing, src, [], parent, doc)
 
 
+function Selectors.runner(::Type{Doctest}, doc::Documents.Document)
+    Utilities.log(doc, "running doctests.")
+
+    if doc.user.doctest === :fix || doc.user.doctest
+        DocTests.doctest(doc.blueprint, doc)
+    else
+        Utilities.warn("Skipped doctesting.")
+    end
+end
+
 function Selectors.runner(::Type{ExpandTemplates}, doc::Documents.Document)
     Utilities.log(doc, "expanding markdown templates.")
     Documenter.Expanders.expand(doc)
@@ -187,7 +205,6 @@ end
 function Selectors.runner(::Type{CheckDocument}, doc::Documents.Document)
     Utilities.log(doc, "running document checks.")
     Documenter.DocChecks.missingdocs(doc)
-    Documenter.DocTests.doctest(doc)
     Documenter.DocChecks.footnotes(doc)
     Documenter.DocChecks.linkcheck(doc)
 end

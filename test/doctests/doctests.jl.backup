@@ -4,8 +4,11 @@ using Compat: @info
 
 println("="^50)
 @info("Testing `doctest = :fix`")
-mktempdir(@__DIR__) do dir
-    srcdir = mktempdir(dir)
+#mktempdir(@__DIR__) do dir
+let dir = joinpath(@__DIR__, "foo")
+    mkdir(dir)
+    #srcdir = mktempdir(dir)
+    srcdir = joinpath(dir, "src"); mkdir(srcdir)
     builddir = mktempdir(dir)
     cp(joinpath(@__DIR__, "broken.md"), joinpath(srcdir, "index.md"))
     cp(joinpath(@__DIR__, "broken.jl"), joinpath(srcdir, "src.jl"))
@@ -13,7 +16,7 @@ mktempdir(@__DIR__) do dir
     @eval using .Foo
     # fix up
     makedocs(modules = [Foo], source = srcdir, build = builddir, doctest = :fix)
-    include(joinpath(srcdir, "src.jl")) # reload fixed module Foo
+    include(joinpath(srcdir, "src.jl"))
     # test that strict = true works
     makedocs(modules = [Foo], source = srcdir, build = builddir, strict = true)
     # also test that we obtain the expected output

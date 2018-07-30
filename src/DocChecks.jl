@@ -7,6 +7,7 @@ module DocChecks
 import ..Documenter:
     Documents,
     Utilities,
+    Utilities.Markdown2,
     IdDict
 
 using Compat, DocStringExtensions

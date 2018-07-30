@@ -15,8 +15,10 @@ import ..Documenter:
     Utilities,
     IdDict
 
+import ..Documenter.Utilities.Markdown2
+
 using Compat, DocStringExtensions
-import Compat.Markdown
+import Compat: Markdown, @info
 using Compat.Unicode
 
 # Pages.
@@ -49,10 +51,12 @@ struct Page
     """
     mapping  :: IdDict
     globals  :: Globals
+    md2ast   :: Markdown2.MD
 end
 function Page(source::AbstractString, build::AbstractString)
-    elements = Markdown.parse(read(source, String)).content
-    Page(source, build, elements, IdDict(), Globals())
+    mdpage = Markdown.parse(read(source, String))
+    md2ast = Markdown2.convert(Markdown2.MD, mdpage)
+    Page(source, build, mdpage.content, IdDict(), Globals(), md2ast)
 end
 
 

@@ -35,6 +35,7 @@ makedocs(
                 "lib/internals/expanders.md",
                 "lib/internals/formats.md",
                 "lib/internals/generator.md",
+                "lib/internals/markdown2.md",
                 "lib/internals/mdflatten.md",
                 "lib/internals/selectors.md",
                 "lib/internals/textdiff.md",

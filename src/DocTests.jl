@@ -7,6 +7,7 @@ using Compat
 using DocStringExtensions
 
 import ..Documenter:
+    DocSystem,
     Documenter,
     Documents,
     Utilities,
@@ -37,32 +38,96 @@ function find_codeblock_in_file(code, file)
     end
 end
 
+mutable struct MutableMD2CodeBlock
+    language :: String
+    code :: String
+end
+MutableMD2CodeBlock(block :: Markdown2.CodeBlock) = MutableMD2CodeBlock(block.language, block.code)
+
 """
 $(SIGNATURES)
 
-Traverses the document tree and tries to run each Julia code block encountered. Will abort
-the document generation when an error is thrown. Use `doctest = false` keyword in
-[`Documenter.makedocs`](@ref) to disable doctesting.
+Traverses the pages and modules in the documenter blueprint, searching and
+executing doctests.
+
+Will abort the document generation when an error is thrown. Use `doctest = false`
+keyword in [`Documenter.makedocs`](@ref) to disable doctesting.
 """
-function doctest(doc::Documents.Document)
-    if doc.user.doctest === :fix || doc.user.doctest
-        println(" > running doctests.")
-        for (src, page) in doc.blueprint.pages
-            empty!(page.globals.meta)
-            for element in page.elements
-                page.globals.meta[:CurrentFile] = page.source
-                Documents.walk(page.globals.meta, page.mapping[element]) do block
-                    doctest(block, page.globals.meta, doc, page)
-                end
+function doctest(blueprint::Documents.DocumentBlueprint, doc::Documents.Document)
+    # find all the doctest blocks in the pages
+    for (src, page) in blueprint.pages
+        doctest(page, doc)
+    end
+
+    # find all the doctest block in all the docstrings (within specified modules)
+    for mod in blueprint.modules
+        for (binding, multidoc) in DocSystem.getmeta(mod)
+            for signature in multidoc.order
+                doctest(multidoc.docs[signature], doc)
             end
         end
+    end
+end
+
+function doctest(page::Documents.Page, doc::Documents.Document)
+    page.globals.meta[:CurrentFile] = page.source
+    doctest(page.md2ast, page, doc)
+end
+
+function doctest(docstr::Docs.DocStr, doc::Documents.Document)
+    # Note: parsedocs / formatdoc in Base is weird.
+    # Markdown.MD(Any[Markdown.parse(seekstart(buffer))])
+    md = DocSystem.parsedoc(docstr)
+    @assert isa(md, Markdown.MD)
+    if length(md.content) == 1 && isa(first(md.content), Markdown.MD)
+        md = first(md.content)
+    end
+    md2ast = Markdown2.convert(Markdown2.MD, md)
+    page = Documents.Page("", "", [], IdDict(), Documents.Globals(), md2ast)
+    if :path in keys(docstr.data)
+        page.globals.meta[:CurrentFile] = docstr.data[:path]
     else
-        Utilities.warn("Skipped doctesting.")
+        page.globals.meta[:CurrentFile] = nothing
+    end
+    doctest(md2ast, page, doc)
+end
+
+function parse_metablock(block::Markdown2.CodeBlock, page, doc)
+    @assert startswith(block.language, "@meta")
+    meta = Dict{Symbol, Any}()
+    for (ex, str) in Utilities.parseblock(block.code, doc, page)
+        if Utilities.isassign(ex)
+            try
+                meta[ex.args[1]] = Core.eval(Main, ex.args[2])
+            catch err
+                push!(doc.internal.errors, :meta_block)
+                Utilities.warn(doc, page, "Failed to evaluate `$(strip(str))` in `@meta` block.", err)
+            end
+        end
+    end
+    return meta
+end
+
+function doctest(md2ast::Markdown2.MD, page, doc::Documents.Document)
+    Markdown2.walk(md2ast) do node
+        isa(node, Markdown2.CodeBlock) || return true
+        if startswith(node.language, "jldoctest")
+            doctest(node, page.globals.meta, doc, page)
+        elseif startswith(node.language, "@meta")
+            merge!(page.globals.meta, parse_metablock(node, page, doc))
+        else
+            return true
+        end
+        return false
     end
 end
 
 function doctest(block::Markdown.Code, meta::Dict, doc::Documents.Document, page)
-    lang = block.language
+    doctest(Markdown2._convert_block(block), meta, doc, page)
+end
+
+function doctest(block_immutable::Markdown2.CodeBlock, meta::Dict, doc::Documents.Document, page)
+    lang = block_immutable.language
     if startswith(lang, "jldoctest")
         # Define new module or reuse an old one from this page if we have a named doctest.
         name = match(r"jldoctest[ ]?(.*)$", split(lang, ';', limit = 2)[1])[1]
@@ -75,6 +140,7 @@ function doctest(block::Markdown.Code, meta::Dict, doc::Documents.Document, page
         end
 
         # Normalise line endings.
+        block = MutableMD2CodeBlock(block_immutable)
         block.code = replace(block.code, "\r\n" => "\n")
 
         # parse keyword arguments to doctest
@@ -126,7 +192,7 @@ function doctest(block::Markdown.Code, meta::Dict, doc::Documents.Document, page
                 """
             )
         end
-       delete!(meta, :LocalDocTestArguments)
+        delete!(meta, :LocalDocTestArguments)
     end
     false
 end
@@ -140,7 +206,7 @@ end
 # Doctest evaluation.
 
 mutable struct Result
-    block  :: Markdown.Code # The entire code block that is being tested.
+    block  :: MutableMD2CodeBlock # The entire code block that is being tested.
     input  :: String # Part of `block.code` representing the current input.
     output :: String # Part of `block.code` representing the current expected output.
     file   :: String # File in which the doctest is written. Either `.md` or `.jl`.
