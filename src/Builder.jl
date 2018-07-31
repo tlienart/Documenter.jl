@@ -185,24 +185,34 @@ walk_navpages(src::String, parent, doc) = walk_navpages(true, nothing, src, [], 
 function Selectors.runner(::Type{Doctest}, doc::Documents.Document)
     Utilities.log(doc, "running doctests.")
 
-    if doc.user.doctest === :fix || doc.user.doctest
+    if doc.user.doctest in [:fix, :only, true]
         DocTests.doctest(doc.blueprint, doc)
+        num_errors = length(doc.internal.errors)
+        if (doc.user.doctest === :only || doc.user.strict) && num_errors > 0
+            error("`makedocs` encountered $(num_errors > 1 ? "$(num_errors) doctest errors" : "a doctest error"). Terminating build")
+        end
     else
         Utilities.warn("Skipped doctesting.")
     end
 end
 
 function Selectors.runner(::Type{ExpandTemplates}, doc::Documents.Document)
+    is_doctest_only(doc, "ExpandTemplates") && return
+
     Utilities.log(doc, "expanding markdown templates.")
     Documenter.Expanders.expand(doc)
 end
 
 function Selectors.runner(::Type{CrossReferences}, doc::Documents.Document)
+    is_doctest_only(doc, "CrossReferences") && return
+
     Utilities.log(doc, "building cross-references.")
     Documenter.CrossReferences.crossref(doc)
 end
 
 function Selectors.runner(::Type{CheckDocument}, doc::Documents.Document)
+    is_doctest_only(doc, "CheckDocument") && return
+
     Utilities.log(doc, "running document checks.")
     Documenter.DocChecks.missingdocs(doc)
     Documenter.DocChecks.footnotes(doc)
@@ -210,12 +220,16 @@ function Selectors.runner(::Type{CheckDocument}, doc::Documents.Document)
 end
 
 function Selectors.runner(::Type{Populate}, doc::Documents.Document)
+    is_doctest_only(doc, "Populate") && return
+
     Utilities.log("populating indices.")
     Documents.doctest_replace!(doc)
     Documents.populate!(doc)
 end
 
 function Selectors.runner(::Type{RenderDocument}, doc::Documents.Document)
+    is_doctest_only(doc, "RenderDocument") && return
+
     count = length(doc.internal.errors)
     if doc.user.strict && count > 0
         error("`makedocs` encountered $(count > 1 ? "errors" : "an error"). Terminating build")
@@ -226,5 +240,13 @@ function Selectors.runner(::Type{RenderDocument}, doc::Documents.Document)
 end
 
 Selectors.runner(::Type{DocumentPipeline}, doc::Documents.Document) = nothing
+
+function is_doctest_only(doc, stepname)
+    if doc.user.doctest in [:fix, :only]
+        Utilities.info("skipped $stepname step (doctest only)")
+        return true
+    end
+    return false
+end
 
 end
